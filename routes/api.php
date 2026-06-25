@@ -17,6 +17,9 @@ Route::prefix('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:api');
 });
 
+use Illuminate\Support\Facades\Broadcast;
+Broadcast::routes(['middleware' => ['auth:api']]);
+
 Route::middleware('auth:api')->group(function () {
     // Users
     Route::get('/users/profile', [UserController::class, 'profile']);
