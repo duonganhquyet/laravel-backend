@@ -19,16 +19,21 @@ class MessageController extends Controller
     public function getHistory($conversationId)
     {
         // For simple pagination in repository getHistory implementation
-        // For now the repository returns array from get().
-        $messages = $this->messageService->getHistory($conversationId, 1, 100);
+        // The repository returns ['messages' => [...], 'currentPage' => ..., 'totalPages' => ..., 'totalMessages' => ...]
+        $result = $this->messageService->getHistory($conversationId, 1, 100);
 
         $formatted = array_map(function($msg) {
-            return $this->formatMessage($msg);
-        }, $messages);
+            return $this->messageService->formatMessage($msg);
+        }, $result['messages']);
 
         return response()->json([
             'success' => true,
-            'data' => $formatted
+            'data' => [
+                'messages' => $formatted,
+                'currentPage' => $result['currentPage'],
+                'totalPages' => $result['totalPages'],
+                'totalMessages' => $result['totalMessages']
+            ]
         ]);
     }
 
@@ -40,7 +45,7 @@ class MessageController extends Controller
         $messages = $this->messageService->searchMessages($keyword, $conversationId, auth()->id());
 
         $formatted = array_map(function($m) {
-            return $this->formatMessage($m);
+            return $this->messageService->formatMessage($m);
         }, $messages);
 
         return response()->json([
@@ -72,10 +77,10 @@ class MessageController extends Controller
                 $file
             );
 
-            $formattedMessage = $this->formatMessage($message);
+            $formattedMessage = $this->messageService->formatMessage($message);
 
             // Broadcast event using Laravel Reverb (Pusher)
-            broadcast(new MessageSent($formattedMessage))->toOthers();
+            broadcast(new MessageSent($formattedMessage));
 
             // Dispatch global notification to all participants except the sender
             $conversation = $message->conversation;
@@ -111,34 +116,48 @@ class MessageController extends Controller
         }
     }
 
-    private function formatMessage($msg) {
-        return [
-            '_id' => (string) $msg->id,
-            'id' => $msg->id,
-            'sender' => [
-                '_id' => (string) $msg->sender->id,
-                'fullName' => $msg->sender->full_name,
-                'avatar' => $msg->sender->avatar,
-            ],
-            'content' => $msg->content,
-            'conversationId' => (string) $msg->conversation_id,
-            'messageType' => $msg->message_type,
-            'fileUrl' => $msg->file_url,
-            'fileName' => $msg->file_name,
-            'fileSize' => $msg->file_size,
-            'mimeType' => $msg->mime_type,
-            'isDeletedBySender' => $msg->is_deleted_by_sender,
-            'isDeletedForAll' => $msg->is_deleted_for_all,
-            'replyToMessageId' => $msg->reply_to_message_id ? (string) $msg->reply_to_message_id : null,
-            'readBy' => $msg->readBy->map(function($u) {
-                return [
-                    '_id' => (string) $u->id,
-                    'fullName' => $u->full_name,
-                    'avatar' => $u->avatar
-                ];
-            })->toArray(),
-            'createdAt' => $msg->created_at,
-            'updatedAt' => $msg->updated_at,
-        ];
+    public function editMessage(Request $request, $messageId)
+    {
+        $request->validate([
+            'content' => 'required|string',
+        ]);
+
+        try {
+            $message = $this->messageService->editMessage($messageId, auth()->id(), $request->input('content'));
+            $formattedMessage = $this->messageService->formatMessage($message);
+
+            broadcast(new \App\Events\MessageUpdated($formattedMessage));
+
+            return response()->json([
+                'success' => true,
+                'data' => $formattedMessage
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 500);
+        }
     }
+
+    public function recallMessage($messageId)
+    {
+        try {
+            $message = $this->messageService->recallMessage($messageId, auth()->id());
+            $formattedMessage = $this->messageService->formatMessage($message);
+
+            broadcast(new \App\Events\MessageDeleted($formattedMessage));
+
+            return response()->json([
+                'success' => true,
+                'data' => $formattedMessage
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 500);
+        }
+    }
+
 }

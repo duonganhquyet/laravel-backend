@@ -20,8 +20,7 @@ class FriendController extends Controller
         
         $friends = $this->friendService->getFriends($userId);
 
-        $friendUsers = $friends->map(function($friend) use ($userId) {
-            $user = $friend->requester_id === $userId ? $friend->recipient : $friend->requester;
+        $friendUsers = collect($friends)->map(function($user) {
             return $this->formatUser($user);
         });
 
@@ -37,7 +36,7 @@ class FriendController extends Controller
         
         $requests = $this->friendService->getPendingRequests($userId);
 
-        $formatted = $requests->map(function($req) {
+        $formatted = collect($requests)->map(function($req) {
             return [
                 '_id' => (string) $req->id,
                 'id' => $req->id,

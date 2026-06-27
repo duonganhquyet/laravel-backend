@@ -25,7 +25,7 @@ class UserController extends Controller
 
     public function search(Request $request)
     {
-        $keyword = $request->query('keyword', '');
+        $keyword = $request->query('query', '');
         
         $users = $this->userService->searchUsers($keyword, auth()->id());
 
@@ -36,7 +36,9 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $formattedUsers
+            'data' => [
+                'users' => $formattedUsers
+            ]
         ]);
     }
 

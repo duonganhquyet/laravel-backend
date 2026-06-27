@@ -22,9 +22,9 @@ Broadcast::routes(['middleware' => ['auth:api']]);
 
 Route::middleware('auth:api')->group(function () {
     // Users
-    Route::get('/users/profile', [UserController::class, 'profile']);
+    Route::get('/user/profile', [UserController::class, 'profile']);
     Route::post('/users/upload-avatar', [UserController::class, 'uploadAvatar']);
-    Route::get('/search', [UserController::class, 'search']);
+    Route::get('/user/search', [UserController::class, 'search']);
 
     // Conversations
     Route::prefix('conversations')->group(function () {
@@ -52,6 +52,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/', [MessageController::class, 'sendMessage']);
         Route::get('/search', [MessageController::class, 'searchMessages']);
         Route::get('/{conversationId}', [MessageController::class, 'getHistory']);
+        Route::put('/{messageId}', [MessageController::class, 'editMessage']);
+        Route::delete('/{messageId}', [MessageController::class, 'recallMessage']);
     });
 
     // Friends

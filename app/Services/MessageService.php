@@ -95,4 +95,76 @@ class MessageService
 
         return $message;
     }
+
+    public function editMessage($messageId, $userId, $newContent)
+    {
+        $message = $this->messageRepository->findById($messageId);
+
+        if (!$message) {
+            throw new \Exception("Message not found", 404);
+        }
+
+        if ($message->sender_id !== $userId) {
+            throw new \Exception("Unauthorized to edit this message", 403);
+        }
+
+        if ($message->message_type !== 'text') {
+            throw new \Exception("Only text messages can be edited", 400);
+        }
+
+        $this->messageRepository->update($messageId, ['content' => $newContent]);
+        
+        return $this->messageRepository->findById($messageId)->load(['sender', 'readBy', 'replyToMessage']);
+    }
+
+    public function recallMessage($messageId, $userId)
+    {
+        $message = $this->messageRepository->findById($messageId);
+
+        if (!$message) {
+            throw new \Exception("Message not found", 404);
+        }
+
+        if ($message->sender_id !== $userId) {
+            throw new \Exception("Unauthorized to recall this message", 403);
+        }
+
+        $this->messageRepository->update($messageId, [
+            'is_deleted_for_all' => true,
+            'content' => 'Tin nhắn đã bị thu hồi'
+        ]);
+
+        return $this->messageRepository->findById($messageId)->load(['sender', 'readBy', 'replyToMessage']);
+    }
+
+    public function formatMessage($msg) {
+        return [
+            '_id' => (string) $msg->id,
+            'id' => $msg->id,
+            'sender' => [
+                '_id' => (string) $msg->sender->id,
+                'fullName' => $msg->sender->full_name,
+                'avatar' => $msg->sender->avatar,
+            ],
+            'content' => $msg->content,
+            'conversationId' => (string) $msg->conversation_id,
+            'messageType' => $msg->message_type,
+            'fileUrl' => $msg->file_url,
+            'fileName' => $msg->file_name,
+            'fileSize' => $msg->file_size,
+            'mimeType' => $msg->mime_type,
+            'isDeletedBySender' => $msg->is_deleted_by_sender,
+            'isDeletedForAll' => $msg->is_deleted_for_all,
+            'replyToMessageId' => $msg->reply_to_message_id ? (string) $msg->reply_to_message_id : null,
+            'readBy' => $msg->readBy->map(function($u) {
+                return [
+                    '_id' => (string) $u->id,
+                    'fullName' => $u->full_name,
+                    'avatar' => $u->avatar
+                ];
+            })->toArray(),
+            'createdAt' => $msg->created_at,
+            'updatedAt' => $msg->updated_at,
+        ];
+    }
 }

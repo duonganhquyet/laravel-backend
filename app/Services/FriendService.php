@@ -27,29 +27,7 @@ class FriendService
 
     public function getFriendStatus($userId, $targetUserId)
     {
-        if ($userId == $targetUserId) {
-            return 'none';
-        }
-
-        $friendship = $this->friendRepository->findFriendship($userId, $targetUserId);
-
-        if (!$friendship) {
-            return 'none';
-        }
-
-        if ($friendship->status === 'accepted') {
-            return 'friends';
-        }
-
-        if ($friendship->status === 'pending') {
-            if ($friendship->requester_id == $userId) {
-                return 'pending_sent';
-            } else {
-                return 'pending_received';
-            }
-        }
-
-        return 'none';
+        return $this->friendRepository->getFriendshipStatus($userId, $targetUserId);
     }
 
     public function sendRequest($userId, $userName, $recipientId)
@@ -58,17 +36,13 @@ class FriendService
             throw new \Exception("Không thể kết bạn với chính mình");
         }
 
-        $existing = $this->friendRepository->findFriendship($userId, $recipientId);
+        $status = $this->friendRepository->getFriendshipStatus($userId, $recipientId);
 
-        if ($existing) {
-            throw new \Exception("Yêu cầu đã tồn tại");
+        if ($status !== 'none') {
+            throw new \Exception("Yêu cầu đã tồn tại hoặc đã là bạn bè");
         }
 
-        $friend = $this->friendRepository->create([
-            'requester_id' => $userId,
-            'recipient_id' => $recipientId,
-            'status' => 'pending'
-        ]);
+        $friend = $this->friendRepository->create($userId, $recipientId);
 
         // Broadcast Realtime FriendRequestSent event
         broadcast(new FriendRequestSent($userId, $userName, $recipientId))->toOthers();
@@ -76,55 +50,41 @@ class FriendService
         return $friend;
     }
 
-    public function acceptRequest($userId, $userName, $requesterId)
+    public function acceptRequest($userId, $userName, $requestId)
     {
-        $friend = $this->friendRepository->findPendingRequest($requesterId, $userId);
+        $friend = $this->friendRepository->findById($requestId);
 
-        if (!$friend) {
+        if (!$friend || $friend->recipient_id !== $userId) {
             throw new \Exception("Không tìm thấy yêu cầu");
         }
 
-        $this->friendRepository->update($friend->id, ['status' => 'accepted']);
+        $friend->update(['status' => 'accepted']);
 
         // Broadcast Realtime FriendRequestAccepted event
+        $requesterId = $friend->requester_id;
         broadcast(new FriendRequestAccepted($userId, $userName, $requesterId))->toOthers();
 
         return true;
     }
 
-    public function declineRequest($userId, $requesterId)
+    public function declineRequest($userId, $requestId)
     {
-        $friend = $this->friendRepository->findPendingRequest($requesterId, $userId);
-
-        if ($friend) {
-            $this->friendRepository->delete($friend->id);
+        $friend = $this->friendRepository->findById($requestId);
+        
+        if ($friend && $friend->recipient_id === $userId) {
+            $friend->delete();
             return true;
         }
-
         return false;
     }
 
     public function cancelRequest($userId, $recipientId)
     {
-        $friend = $this->friendRepository->findPendingRequest($userId, $recipientId);
-
-        if ($friend) {
-            $this->friendRepository->delete($friend->id);
-            return true;
-        }
-
-        return false;
+        return $this->friendRepository->deleteRequest($userId, $recipientId);
     }
 
     public function unfriend($userId, $friendId)
     {
-        $friendship = $this->friendRepository->findFriendship($userId, $friendId);
-
-        if ($friendship) {
-            $this->friendRepository->delete($friendship->id);
-            return true;
-        }
-
-        return false;
+        return $this->friendRepository->deleteFriendship($userId, $friendId);
     }
 }
